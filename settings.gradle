@@ -1,0 +1,6 @@
+rootProject.name ='newsletter-services'
+include 'api-gateway'
+include 'core-service'
+include 'ai-service'
+include 'email-service'
+include 'common-lib'
