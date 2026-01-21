@@ -5,6 +5,7 @@
       <module fileurl="file://$PROJECT_DIR$/core-service/src/main/resources/db/changes/changes.iml" filepath="$PROJECT_DIR$/core-service/src/main/resources/db/changes/changes.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/api-gateway/newsletter-services.api-gateway.main.iml" filepath="$PROJECT_DIR$/.idea/modules/api-gateway/newsletter-services.api-gateway.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/core-service/newsletter-services.core-service.main.iml" filepath="$PROJECT_DIR$/.idea/modules/core-service/newsletter-services.core-service.main.iml" />
+      <module fileurl="file://$PROJECT_DIR$/core-service/src/main/java/com/example/user/user.iml" filepath="$PROJECT_DIR$/core-service/src/main/java/com/example/user/user.iml" />
     </modules>
   </component>
 </project>
