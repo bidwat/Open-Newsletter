@@ -1,7 +1,10 @@
 package com.example.core_service.user;
 
-import com.example.common.events.UserRegisteredEvent;
 import com.example.core_service.service.KafkaProducerService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
@@ -9,30 +12,34 @@ import java.util.List;
 @RequestMapping("/users")
 public class UserController {
 
-    private final UserRepository userRepository;
-    private final KafkaProducerService kafkaProducerService;
+    private final UserService userService;
 
-    public UserController(UserRepository userRepository, KafkaProducerService kafkaProducerService) {
-        this.userRepository = userRepository;
-        this.kafkaProducerService = kafkaProducerService;
+
+    public UserController(UserService userService) {
+        this.userService = userService;
     }
 
     @GetMapping
     public List<User> getAllUsers() {
-        return userRepository.findAll();
+        return userService.findAll();
     }
 
     @PostMapping
     public User createUser(@RequestBody User user) {
-        User savedUser = userRepository.save(user);
+        return userService.registerNewUser(user.getAuth0Id(), user.getEmail());
+    }
 
-        UserRegisteredEvent event = new UserRegisteredEvent(
-                savedUser.getId().toString(),
-                savedUser.getEmail()
-        );
-        kafkaProducerService.sendUserRegisteredEvent(event);
+    @PostMapping("/sync")
+    public ResponseEntity<?> syncUser(@AuthenticationPrincipal Jwt jwt) {
+        String auth0Id = jwt.getSubject();
+        String email = jwt.getClaimAsString("email");
 
-        return savedUser;
+        if (email == null) {
+            return ResponseEntity.badRequest().body("Email claim is missing in the JWT");
+        }
+
+        User user = userService.syncUser(auth0Id, email);
+        return ResponseEntity.ok(user);
     }
 
 
