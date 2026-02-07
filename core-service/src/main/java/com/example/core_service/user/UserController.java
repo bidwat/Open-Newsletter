@@ -1,10 +1,8 @@
 package com.example.core_service.user;
 
-import com.example.core_service.service.KafkaProducerService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
@@ -32,13 +30,7 @@ public class UserController {
     @PostMapping("/sync")
     public ResponseEntity<?> syncUser(@AuthenticationPrincipal Jwt jwt) {
         String auth0Id = jwt.getSubject();
-        String email = jwt.getClaimAsString("email");
-
-        if (email == null) {
-            return ResponseEntity.badRequest().body("Email claim is missing in the JWT");
-        }
-
-        User user = userService.syncUser(auth0Id, email);
+        User user = userService.getOrCreateUserByAccessToken(auth0Id, jwt.getTokenValue());
         return ResponseEntity.ok(user);
     }
 

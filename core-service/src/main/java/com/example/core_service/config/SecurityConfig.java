@@ -1,5 +1,6 @@
 package com.example.core_service.config;
 
+import com.example.common.kafka.KafkaTopics;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -82,9 +83,11 @@ public class SecurityConfig {
     @Bean
     public KafkaAdmin.NewTopics kafkaTopics() {
         return new KafkaAdmin.NewTopics(
-                new org.apache.kafka.clients.admin.NewTopic("test-topic", 1, (short) 1),
-                new org.apache.kafka.clients.admin.NewTopic("test-topic-2", 1, (short) 1),
-                new org.apache.kafka.clients.admin.NewTopic("user-registered-topic", 1, (short) 1)
+                new org.apache.kafka.clients.admin.NewTopic(KafkaTopics.TEST_TOPIC, 1, (short) 1),
+                new org.apache.kafka.clients.admin.NewTopic(KafkaTopics.TEST_TOPIC_2, 1, (short) 1),
+                new org.apache.kafka.clients.admin.NewTopic(KafkaTopics.USER_REGISTERED, 1, (short) 1),
+                new org.apache.kafka.clients.admin.NewTopic(KafkaTopics.SEND_CAMPAIGN, 1, (short) 1),
+                new org.apache.kafka.clients.admin.NewTopic(KafkaTopics.DELIVERY_STATUS, 1, (short) 1)
         );
     }
 
