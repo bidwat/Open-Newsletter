@@ -7,4 +7,6 @@ import java.util.Optional;
 
 public interface ContactRepository extends JpaRepository<Contact, Integer> {
     Optional<Contact> findByUserAndEmail(User user, String email);
+    Optional<Contact> findByUserAndEmailAndDeletedAtIsNull(User user, String email);
+    Optional<Contact> findByIdAndUserAndDeletedAtIsNull(Integer id, User user);
 }

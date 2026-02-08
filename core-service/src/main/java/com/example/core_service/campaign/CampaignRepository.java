@@ -7,6 +7,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface CampaignRepository extends JpaRepository<Campaign, Integer> {
-    List<Campaign> findAllByUser(User user);
-    Optional<Campaign> findByIdAndUser(Integer id, User user);
+    List<Campaign> findAllByUserAndDeletedAtIsNull(User user);
+    Optional<Campaign> findByIdAndUserAndDeletedAtIsNull(Integer id, User user);
 }

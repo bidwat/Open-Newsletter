@@ -4,12 +4,13 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
 public class CampaignResponse {
     private Integer id;
-    private Integer mailingListId;
+    private List<MailingListSummaryResponse> mailingLists;
     private String name;
     private String subject;
     private String htmlContent;
@@ -17,4 +18,5 @@ public class CampaignResponse {
     private String status;
     private LocalDateTime createdAt;
     private LocalDateTime sentAt;
+    private List<Integer> excludedContactIds;
 }

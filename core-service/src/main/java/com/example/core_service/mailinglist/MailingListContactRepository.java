@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface MailingListContactRepository extends JpaRepository<MailingListContact, Integer> {
     List<MailingListContact> findAllByMailingList(MailingList mailingList);
     Optional<MailingListContact> findByMailingListAndContact(MailingList mailingList, Contact contact);
+    void deleteByMailingListAndContact(MailingList mailingList, Contact contact);
 }

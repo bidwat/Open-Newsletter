@@ -37,6 +37,9 @@ public class Contact {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     @PrePersist
     void onCreate() {
         if (createdAt == null) {

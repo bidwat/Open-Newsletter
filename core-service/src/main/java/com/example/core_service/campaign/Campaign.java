@@ -1,6 +1,5 @@
 package com.example.core_service.campaign;
 
-import com.example.core_service.mailinglist.MailingList;
 import com.example.core_service.user.User;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -9,6 +8,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "campaigns")
@@ -26,9 +27,11 @@ public class Campaign {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "mailing_list_id", nullable = false)
-    private MailingList mailingList;
+    @OneToMany(mappedBy = "campaign", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CampaignMailingList> mailingLists = new ArrayList<>();
+
+    @OneToMany(mappedBy = "campaign", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<CampaignExclusion> exclusions = new ArrayList<>();
 
     @Column(nullable = false, length = 150)
     private String name;
@@ -56,6 +59,9 @@ public class Campaign {
 
     @Column(name = "sent_at")
     private LocalDateTime sentAt;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @PrePersist
     void onCreate() {

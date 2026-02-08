@@ -7,6 +7,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface MailingListRepository extends JpaRepository<MailingList, Integer> {
-    List<MailingList> findAllByUser(User user);
-    Optional<MailingList> findByIdAndUser(Integer id, User user);
+    List<MailingList> findAllByUserAndDeletedAtIsNull(User user);
+    Optional<MailingList> findByIdAndUserAndDeletedAtIsNull(Integer id, User user);
 }

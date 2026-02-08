@@ -1,6 +1,6 @@
-package com.example.core_service.mailinglist;
+package com.example.core_service.campaign;
 
-import com.example.core_service.user.User;
+import com.example.core_service.contact.Contact;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -10,32 +10,27 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "mailing_lists")
+@Table(name = "campaign_exclusions")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class MailingList {
+public class CampaignExclusion {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @JoinColumn(name = "campaign_id", nullable = false)
+    private Campaign campaign;
 
-    @Column(nullable = false, length = 150)
-    private String name;
-
-    @Column(length = 500)
-    private String description;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "contact_id", nullable = false)
+    private Contact contact;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
-
-    @Column(name = "deleted_at")
-    private LocalDateTime deletedAt;
 
     @PrePersist
     void onCreate() {

@@ -2,16 +2,15 @@ package com.example.core_service.api;
 
 import com.example.core_service.api.dto.CampaignResponse;
 import com.example.core_service.api.dto.CreateCampaignRequest;
+import com.example.core_service.api.dto.MailingListSummaryResponse;
 import com.example.core_service.api.dto.UpdateCampaignRequest;
 import com.example.core_service.campaign.Campaign;
 import com.example.core_service.campaign.CampaignService;
 import com.example.core_service.user.User;
 import com.example.core_service.user.UserService;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -23,7 +22,8 @@ public class CampaignController {
     private final CampaignService campaignService;
     private final UserService userService;
 
-    public CampaignController(CampaignService campaignService, UserService userService) {
+    public CampaignController(CampaignService campaignService,
+                              UserService userService) {
         this.campaignService = campaignService;
         this.userService = userService;
     }
@@ -32,13 +32,18 @@ public class CampaignController {
     public CampaignResponse createDraft(@AuthenticationPrincipal Jwt jwt,
                                         @RequestBody CreateCampaignRequest request) {
         User user = userService.resolveUser(jwt);
+        List<Integer> listIds = request.getMailingListIds();
+        if ((listIds == null || listIds.isEmpty()) && request.getMailingListId() != null) {
+            listIds = List.of(request.getMailingListId());
+        }
         Campaign campaign = campaignService.createDraft(
                 user,
-                request.getMailingListId(),
+                listIds,
                 request.getName(),
                 request.getSubject(),
                 request.getHtmlContent(),
-                request.getTextContent()
+                request.getTextContent(),
+                request.getExcludedContactIds()
         );
         return toResponse(campaign);
     }
@@ -51,10 +56,12 @@ public class CampaignController {
         Campaign campaign = campaignService.updateDraft(
                 user,
                 campaignId,
+                request.getMailingListIds(),
                 request.getName(),
                 request.getSubject(),
                 request.getHtmlContent(),
-                request.getTextContent()
+                request.getTextContent(),
+                request.getExcludedContactIds()
         );
         return toResponse(campaign);
     }
@@ -68,7 +75,7 @@ public class CampaignController {
     }
 
     @GetMapping("/{campaignId}")
-    public CampaignResponse getCampaigns(@AuthenticationPrincipal Jwt jwt, @PathVariable Integer campaignId) {
+    public CampaignResponse getCampaign(@AuthenticationPrincipal Jwt jwt, @PathVariable Integer campaignId) {
         User user = userService.resolveUser(jwt);
         return toResponse(campaignService.getCampaign(campaignId, user));
     }
@@ -80,18 +87,36 @@ public class CampaignController {
         return toResponse(campaign);
     }
 
+    @PostMapping("/{campaignId}/copy")
+    public CampaignResponse copyCampaign(@AuthenticationPrincipal Jwt jwt, @PathVariable Integer campaignId) {
+        User user = userService.resolveUser(jwt);
+        return toResponse(campaignService.copyCampaign(user, campaignId));
+    }
+
+    @DeleteMapping("/{campaignId}")
+    public void deleteCampaign(@AuthenticationPrincipal Jwt jwt, @PathVariable Integer campaignId) {
+        User user = userService.resolveUser(jwt);
+        campaignService.softDeleteCampaign(user, campaignId);
+    }
+
     private CampaignResponse toResponse(Campaign campaign) {
+        List<MailingListSummaryResponse> mailingLists = campaignService.getCampaignMailingLists(campaign).stream()
+                .map(list -> new MailingListSummaryResponse(list.getId(), list.getName()))
+                .collect(Collectors.toList());
+
+        List<Integer> excludedContactIds = campaignService.getExcludedContactIds(campaign);
+
         return new CampaignResponse(
                 campaign.getId(),
-                campaign.getMailingList().getId(),
+                mailingLists,
                 campaign.getName(),
                 campaign.getSubject(),
                 campaign.getHtmlContent(),
                 campaign.getTextContent(),
                 campaign.getStatus(),
                 campaign.getCreatedAt(),
-                campaign.getSentAt()
+                campaign.getSentAt(),
+                excludedContactIds
         );
     }
-
 }
