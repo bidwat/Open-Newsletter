@@ -31,6 +31,9 @@ public class MailingList {
     @Column(length = 500)
     private String description;
 
+    @Column(name = "hidden", nullable = false)
+    private boolean hidden;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

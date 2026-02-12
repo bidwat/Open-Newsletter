@@ -1,9 +1,6 @@
 package com.example.core_service.api;
 
-import com.example.core_service.api.dto.CampaignResponse;
-import com.example.core_service.api.dto.CreateCampaignRequest;
-import com.example.core_service.api.dto.MailingListSummaryResponse;
-import com.example.core_service.api.dto.UpdateCampaignRequest;
+import com.example.core_service.api.dto.*;
 import com.example.core_service.campaign.Campaign;
 import com.example.core_service.campaign.CampaignService;
 import com.example.core_service.user.User;
@@ -99,9 +96,42 @@ public class CampaignController {
         campaignService.softDeleteCampaign(user, campaignId);
     }
 
+    @GetMapping("/{campaignId}/contacts")
+    public List<CampaignContactStatusResponse> getCampaignContacts(@AuthenticationPrincipal Jwt jwt,
+                                                                   @PathVariable Integer campaignId) {
+        User user = userService.resolveUser(jwt);
+        return campaignService.getCampaignContactStatuses(user, campaignId).stream()
+                .map(status -> new CampaignContactStatusResponse(
+                        status.contact().getId(),
+                        status.contact().getEmail(),
+                        status.contact().getFirstName(),
+                        status.contact().getLastName(),
+                        status.included(),
+                        status.excluded()
+                ))
+                .collect(Collectors.toList());
+    }
+
+    @PostMapping("/{campaignId}/contacts/{contactId}/exclusion")
+    public List<Integer> toggleExclusion(@AuthenticationPrincipal Jwt jwt,
+                                         @PathVariable Integer campaignId,
+                                         @PathVariable Integer contactId,
+                                         @RequestBody ToggleExclusionRequest request) {
+        User user = userService.resolveUser(jwt);
+        return campaignService.toggleExclusion(user, campaignId, contactId, request.isExclude());
+    }
+
+    @PostMapping("/{campaignId}/contacts/exclusions")
+    public List<Integer> bulkToggleExclusions(@AuthenticationPrincipal Jwt jwt,
+                                              @PathVariable Integer campaignId,
+                                              @RequestBody BulkToggleExclusionRequest request) {
+        User user = userService.resolveUser(jwt);
+        return campaignService.bulkToggleExclusions(user, campaignId, request.getContactIds(), request.isExclude());
+    }
+
     private CampaignResponse toResponse(Campaign campaign) {
         List<MailingListSummaryResponse> mailingLists = campaignService.getCampaignMailingLists(campaign).stream()
-                .map(list -> new MailingListSummaryResponse(list.getId(), list.getName()))
+            .map(list -> new MailingListSummaryResponse(list.getId(), list.getName(), list.isHidden()))
                 .collect(Collectors.toList());
 
         List<Integer> excludedContactIds = campaignService.getExcludedContactIds(campaign);

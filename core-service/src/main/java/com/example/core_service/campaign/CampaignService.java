@@ -97,8 +97,11 @@ public class CampaignService {
 
         if (mailingListIds != null) {
             List<MailingList> lists = resolveLists(user, mailingListIds);
-            campaignMailingListRepository.deleteAllByCampaign(campaign);
-            saveCampaignLists(campaign, lists);
+            updateCampaignMailingLists(campaign, lists);
+        }
+
+        if (excludedContactIds != null) {
+            applyExclusions(campaign, user, new LinkedHashSet<>(excludedContactIds));
         }
 
 
@@ -182,25 +185,10 @@ public class CampaignService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Campaign has no mailing lists");
         }
 
-        Set<Integer> excludedIds = campaignExclusionRepository.findAllByCampaign(campaign)
-                .stream()
-                .map(link -> link.getContact().getId())
-                .collect(Collectors.toSet());
+        Set<Integer> excludedIds = currentExclusionIds(campaign);
 
-        Map<Integer, Contact> uniqueContacts = new LinkedHashMap<>();
-        for (CampaignMailingList link : listLinks) {
-            List<MailingListContact> listContacts = mailingListContactRepository.findAllByMailingList(link.getMailingList());
-            for (MailingListContact listContact : listContacts) {
-                Contact contact = listContact.getContact();
-                if (contact.getDeletedAt() != null) {
-                    continue;
-                }
-                if (excludedIds.contains(contact.getId())) {
-                    continue;
-                }
-                uniqueContacts.putIfAbsent(contact.getId(), contact);
-            }
-        }
+        Map<Integer, Contact> uniqueContacts = collectCampaignContacts(campaign);
+        excludedIds.forEach(uniqueContacts::remove);
 
         if (uniqueContacts.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Campaign has no eligible contacts");
@@ -235,22 +223,143 @@ public class CampaignService {
         return campaignRepository.save(campaign);
     }
 
+    public List<ContactStatus> getCampaignContactStatuses(User user, Integer campaignId) {
+        Campaign campaign = getCampaign(campaignId, user);
+        Map<Integer, Contact> contacts = collectCampaignContacts(campaign);
+        Set<Integer> excluded = currentExclusionIds(campaign);
+
+        return contacts.values().stream()
+                .map(contact -> new ContactStatus(contact, true, excluded.contains(contact.getId())))
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public List<Integer> bulkToggleExclusions(User user, Integer campaignId, List<Integer> contactIds, boolean exclude) {
+        Campaign campaign = getCampaign(campaignId, user);
+        Set<Integer> targetIds = new LinkedHashSet<>(currentExclusionIds(campaign));
+        if (contactIds != null) {
+            contactIds.stream()
+                    .filter(Objects::nonNull)
+                    .forEach(id -> {
+                        if (exclude) {
+                            targetIds.add(id);
+                        } else {
+                            targetIds.remove(id);
+                        }
+                    });
+        }
+        applyExclusions(campaign, user, targetIds);
+        return new ArrayList<>(targetIds);
+    }
+
+    @Transactional
+    public List<Integer> toggleExclusion(User user, Integer campaignId, Integer contactId, boolean exclude) {
+        return bulkToggleExclusions(user, campaignId, contactId == null ? List.of() : List.of(contactId), exclude);
+    }
+
+    private void applyExclusions(Campaign campaign, User user, Set<Integer> targetIds) {
+        Set<Integer> sanitizedIds = targetIds.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        Map<Integer, Contact> eligibleContacts = collectCampaignContacts(campaign);
+        List<CampaignExclusion> existing = campaignExclusionRepository.findAllByCampaign(campaign);
+        Set<Integer> existingIds = existing.stream()
+                .map(link -> link.getContact().getId())
+                .collect(Collectors.toSet());
+
+        existing.stream()
+                .filter(link -> !sanitizedIds.contains(link.getContact().getId()))
+                .forEach(campaignExclusionRepository::delete);
+
+        for (Integer contactId : sanitizedIds) {
+            if (existingIds.contains(contactId)) {
+                continue;
+            }
+            Contact contact = contactRepository.findByIdAndUserAndDeletedAtIsNull(contactId, user)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Excluded contact not found"));
+            if (!eligibleContacts.containsKey(contactId)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Contact must belong to a selected mailing list to be excluded");
+            }
+            CampaignExclusion exclusion = new CampaignExclusion();
+            exclusion.setCampaign(campaign);
+            exclusion.setContact(contact);
+            campaignExclusionRepository.save(exclusion);
+        }
+    }
+
+    private Set<Integer> currentExclusionIds(Campaign campaign) {
+        return campaignExclusionRepository.findAllByCampaign(campaign).stream()
+                .map(link -> link.getContact().getId())
+                .collect(Collectors.toSet());
+    }
+
+    private Map<Integer, Contact> collectCampaignContacts(Campaign campaign) {
+        Map<Integer, Contact> uniqueContacts = new LinkedHashMap<>();
+        List<CampaignMailingList> listLinks = campaignMailingListRepository.findAllByCampaign(campaign);
+        for (CampaignMailingList link : listLinks) {
+            List<MailingListContact> listContacts = mailingListContactRepository.findAllByMailingList(link.getMailingList());
+            for (MailingListContact listContact : listContacts) {
+                Contact contact = listContact.getContact();
+                if (contact.getDeletedAt() != null) {
+                    continue;
+                }
+                uniqueContacts.putIfAbsent(contact.getId(), contact);
+            }
+        }
+        return uniqueContacts;
+    }
+
+    public record ContactStatus(Contact contact, boolean included, boolean excluded) {
+    }
+
     private List<MailingList> resolveLists(User user, List<Integer> mailingListIds) {
         if (mailingListIds == null || mailingListIds.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one mailing list is required");
         }
-        List<MailingList> lists = mailingListIds.stream()
-                .map(id -> mailingListRepository.findByIdAndUserAndDeletedAtIsNull(id, user)
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mailing list not found")))
-                .collect(Collectors.toList());
+        Map<Integer, MailingList> uniqueLists = new LinkedHashMap<>();
+        mailingListIds.forEach(id -> {
+            MailingList list = mailingListRepository.findByIdAndUserAndDeletedAtIsNull(id, user)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Mailing list not found"));
+            uniqueLists.putIfAbsent(list.getId(), list);
+        });
+        List<MailingList> lists = new ArrayList<>(uniqueLists.values());
         if (lists.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one mailing list is required");
         }
         return lists;
     }
 
+    private void updateCampaignMailingLists(Campaign campaign, List<MailingList> requestedLists) {
+        Set<Integer> requestedIds = requestedLists.stream()
+                .map(MailingList::getId)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        List<CampaignMailingList> existingLinks = campaignMailingListRepository.findAllByCampaign(campaign);
+        Set<Integer> existingIds = existingLinks.stream()
+                .map(link -> link.getMailingList().getId())
+                .collect(Collectors.toSet());
+
+        existingLinks.stream()
+                .filter(link -> !requestedIds.contains(link.getMailingList().getId()))
+                .forEach(campaignMailingListRepository::delete);
+
+        requestedLists.stream()
+                .filter(list -> !existingIds.contains(list.getId()))
+                .forEach(list -> {
+                    CampaignMailingList link = new CampaignMailingList();
+                    link.setCampaign(campaign);
+                    link.setMailingList(list);
+                    campaignMailingListRepository.save(link);
+                });
+    }
+
     private void saveCampaignLists(Campaign campaign, List<MailingList> lists) {
+        Set<Integer> seen = new HashSet<>();
         lists.forEach(list -> {
+            if (!seen.add(list.getId())) {
+                return;
+            }
             CampaignMailingList link = new CampaignMailingList();
             link.setCampaign(campaign);
             link.setMailingList(list);
@@ -262,14 +371,7 @@ public class CampaignService {
         if (excludedContactIds == null) {
             return;
         }
-        excludedContactIds.forEach(contactId -> {
-            Contact contact = contactRepository.findByIdAndUserAndDeletedAtIsNull(contactId, user)
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Excluded contact not found"));
-            CampaignExclusion exclusion = new CampaignExclusion();
-            exclusion.setCampaign(campaign);
-            exclusion.setContact(contact);
-            campaignExclusionRepository.save(exclusion);
-        });
+        applyExclusions(campaign, user, new LinkedHashSet<>(excludedContactIds));
     }
 
     private CampaignStatus determineStatus(String subject, String htmlContent, String textContent) {

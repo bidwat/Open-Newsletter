@@ -8,4 +8,5 @@ import lombok.Data;
 public class MailingListSummaryResponse {
     private Integer id;
     private String name;
+    private boolean hidden;
 }

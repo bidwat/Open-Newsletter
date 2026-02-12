@@ -2,6 +2,7 @@ package com.example.core_service.mailinglist;
 
 import com.example.core_service.contact.Contact;
 import com.example.core_service.contact.ContactRepository;
+import com.example.core_service.campaign.CampaignMailingListRepository;
 import com.example.core_service.imports.ContactImportService;
 import com.example.core_service.imports.ImportedContact;
 import com.example.core_service.user.User;
@@ -21,15 +22,18 @@ public class MailingListService {
     private final ContactRepository contactRepository;
     private final MailingListContactRepository mailingListContactRepository;
     private final ContactImportService contactImportService;
+    private final CampaignMailingListRepository campaignMailingListRepository;
 
     public MailingListService(MailingListRepository mailingListRepository,
                               ContactRepository contactRepository,
                               MailingListContactRepository mailingListContactRepository,
-                              ContactImportService contactImportService) {
+                              ContactImportService contactImportService,
+                              CampaignMailingListRepository campaignMailingListRepository) {
         this.mailingListRepository = mailingListRepository;
         this.contactRepository = contactRepository;
         this.mailingListContactRepository = mailingListContactRepository;
         this.contactImportService = contactImportService;
+        this.campaignMailingListRepository = campaignMailingListRepository;
     }
 
     public MailingList createList(User user, String name, String description) {
@@ -56,8 +60,29 @@ public class MailingListService {
 
     public void softDeleteList(User user, Integer listId) {
         MailingList list = getList(user, listId);
+        var activeCampaigns = campaignMailingListRepository.findAllByMailingList(list).stream()
+                .map(link -> link.getCampaign())
+                .filter(campaign -> campaign.getDeletedAt() == null)
+                .toList();
+
+        if (!activeCampaigns.isEmpty()) {
+            String campaignNames = activeCampaigns.stream()
+                    .map(campaign -> String.format("%s (id %d, status %s)", campaign.getName(), campaign.getId(), campaign.getStatus()))
+                    .collect(Collectors.joining(", "));
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Mailing list is used by campaigns: " + campaignNames + ". Remove this list from those campaigns or hide it instead of deleting.");
+        }
         list.setDeletedAt(LocalDateTime.now());
         mailingListRepository.save(list);
+    }
+
+    public MailingList toggleHidden(User user, Integer listId, boolean hidden) {
+        MailingList list = getList(user, listId);
+        if (list.isHidden() == hidden) {
+            return list;
+        }
+        list.setHidden(hidden);
+        return mailingListRepository.save(list);
     }
 
     public MailingList copyList(User user, Integer listId) {
@@ -66,6 +91,7 @@ public class MailingListService {
         copy.setUser(user);
         copy.setName("copy " + original.getName());
         copy.setDescription(original.getDescription());
+        copy.setHidden(original.isHidden());
         MailingList savedCopy = mailingListRepository.save(copy);
 
         List<MailingListContact> contacts = mailingListContactRepository.findAllByMailingList(original);
@@ -117,8 +143,15 @@ public class MailingListService {
 
         if (contact.getDeletedAt() != null) {
             contact.setDeletedAt(null);
-            contactRepository.save(contact);
         }
+
+        if (firstName != null) {
+            contact.setFirstName(firstName);
+        }
+        if (lastName != null) {
+            contact.setLastName(lastName);
+        }
+        contactRepository.save(contact);
 
         mailingListContactRepository.findByMailingListAndContact(list, contact)
                 .orElseGet(() -> {
@@ -140,7 +173,13 @@ public class MailingListService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Contact not found in list"));
 
         if (email != null && !email.isBlank()) {
-            contact.setEmail(email.trim().toLowerCase());
+            String normalized = email.trim().toLowerCase();
+            contactRepository.findByUserAndEmail(user, normalized)
+                    .filter(existing -> !existing.getId().equals(contactId))
+                    .ifPresent(existing -> {
+                        throw new ResponseStatusException(HttpStatus.CONFLICT, "A contact with this email already exists. Add the mailing list to that contact instead.");
+                    });
+            contact.setEmail(normalized);
         }
         if (firstName != null) {
             contact.setFirstName(firstName);
