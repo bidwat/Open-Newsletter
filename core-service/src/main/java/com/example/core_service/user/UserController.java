@@ -27,11 +27,25 @@ public class UserController {
         return userService.registerNewUser(user.getAuth0Id(), user.getEmail());
     }
 
+    @GetMapping("/me/profile")
+    public ResponseEntity<User> getMyProfile(@AuthenticationPrincipal Jwt jwt) {
+        User user = userService.resolveUser(jwt);
+        return ResponseEntity.ok(user);
+    }
+
     @PostMapping("/sync")
     public ResponseEntity<?> syncUser(@AuthenticationPrincipal Jwt jwt) {
         String auth0Id = jwt.getSubject();
         User user = userService.getOrCreateUserByAccessToken(auth0Id, jwt.getTokenValue());
         return ResponseEntity.ok(user);
+    }
+
+    @PutMapping("/me/profile")
+    public ResponseEntity<User> updateMyProfile(@AuthenticationPrincipal Jwt jwt,
+                                                @RequestBody UpdateUserProfileRequest request) {
+        User user = userService.resolveUser(jwt);
+        User updatedUser = userService.updateProfile(user.getId(), request.name(), request.username());
+        return ResponseEntity.ok(updatedUser);
     }
 
 
